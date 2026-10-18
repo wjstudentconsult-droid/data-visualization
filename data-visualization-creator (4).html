@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Data Visualization Tool</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  body { font-family: 'Prompt', sans-serif; }
+  input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  .chart-container { min-height: 520px; }
+  #importBox.drag { background:#dbeafe; border-color:#2563eb; }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-800">
+
+<nav class="bg-blue-600 text-white p-4 shadow-lg sticky top-0 z-50">
+  <div class="container mx-auto flex flex-wrap gap-3 justify-between items-center">
+    <h1 class="text-2xl font-bold">📊 Data Visualization Creator</h1>
+    <div class="flex items-center gap-3">
+      <!-- Language toggle -->
+      <div class="flex rounded-lg overflow-hidden border border-white/60 text-sm">
+        <button id="langTh" onclick="setLang('th')" class="px-3 py-1.5 transition">ไทย</button>
+        <button id="langEn" onclick="setLang('en')" class="px-3 py-1.5 transition">English</button>
+      </div>
+      <button onclick="resetPage()" data-i18n="reset" class="bg-red-500 hover:bg-red-600 px-4 py-2 rounded-lg text-sm transition shadow"></button>
+    </div>
+  </div>
+</nav>
+
+<div class="container mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+  <!-- Left panel -->
+  <div class="lg:col-span-5 space-y-6 min-w-0">
+
+    <div class="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+      <h2 class="text-xl font-semibold mb-4 text-blue-700 border-b pb-2" data-i18n="s1"></h2>
+
+      <div id="importBox" class="mb-4 p-3 border-2 border-dashed border-blue-300 rounded-lg bg-blue-50/60 transition">
+        <div class="flex flex-wrap gap-2 items-center">
+          <button type="button" onclick="$('fileInput').click()" data-i18n="impFile" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-medium shadow transition"></button>
+          <button type="button" onclick="togglePaste()" data-i18n="impPaste" class="bg-white hover:bg-slate-50 text-blue-700 px-3 py-2 rounded-lg text-sm font-medium border border-blue-300 transition"></button>
+          <input type="file" id="fileInput" class="hidden" accept=".xlsx,.xls,.xlsm,.xlsb,.ods,.csv,.tsv,.txt">
+          <span id="fileName" class="text-xs text-slate-600 break-all"></span>
+        </div>
+        <p class="text-xs text-slate-500 mt-2" data-i18n="impTip"></p>
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2">
+          <label class="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" id="hasHeader" checked onchange="reapplyImport()" class="w-4 h-4 accent-blue-600">
+            <span data-i18n="hasHeader"></span>
+          </label>
+          <label id="sheetRow" class="hidden items-center gap-2 text-sm">
+            <span data-i18n="sheet"></span>
+            <select id="sheetSel" onchange="loadSheet()" class="p-1.5 border border-slate-300 rounded text-sm bg-white"></select>
+          </label>
+        </div>
+        <div id="pasteBox" class="hidden mt-3">
+          <textarea id="pasteArea" rows="5" class="w-full p-2 border border-slate-300 rounded text-sm font-mono focus:border-blue-500 focus:outline-none" style="white-space:pre"></textarea>
+          <button type="button" onclick="importPasted()" data-i18n="impDo" class="mt-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-sm transition"></button>
+        </div>
+        <p id="importMsg" class="text-xs mt-2 hidden"></p>
+      </div>
+
+      <div class="overflow-auto max-h-[420px] border rounded-lg">
+        <table class="text-left border-collapse">
+          <thead>
+            <tr id="headRow" class="bg-slate-100 sticky top-0 z-10">
+              <th class="p-2 text-sm font-semibold border-b whitespace-nowrap"><label class="inline-flex items-center gap-1 cursor-pointer" data-i18n-title="useRows"><input type="checkbox" id="rowAll" checked class="w-4 h-4 accent-blue-600"><span data-i18n="idx"></span></label></th>
+              <th class="p-2 text-sm font-semibold border-b min-w-[130px]" data-i18n="xCol"></th>
+            </tr>
+          </thead>
+          <tbody id="dataTableBody"></tbody>
+        </table>
+      </div>
+
+      <div class="flex flex-wrap items-center justify-between gap-2 mt-3 p-2 bg-indigo-50 border border-indigo-100 rounded-lg">
+        <span id="selInfo" class="text-sm text-indigo-800 font-medium"></span>
+        <span class="flex gap-1">
+          <button type="button" onclick="setAllCols(true)" data-i18n="allCols" class="text-xs bg-white hover:bg-indigo-100 text-indigo-700 px-2 py-1 rounded border border-indigo-200 transition"></button>
+          <button type="button" onclick="setAllCols(false)" data-i18n="noCols" class="text-xs bg-white hover:bg-indigo-100 text-indigo-700 px-2 py-1 rounded border border-indigo-200 transition"></button>
+        </span>
+      </div>
+      <p class="text-xs text-slate-500 mt-1" data-i18n="selTip"></p>
+
+      <div class="grid grid-cols-2 gap-2 mt-4">
+        <button onclick="addRow()" data-i18n="addRow" class="bg-green-100 text-green-700 hover:bg-green-200 py-2 rounded-lg font-medium transition border border-green-300"></button>
+        <button onclick="removeRow()" data-i18n="delRow" class="bg-red-100 text-red-700 hover:bg-red-200 py-2 rounded-lg font-medium transition border border-red-300"></button>
+        <button onclick="addColumn()" data-i18n="addCol" class="bg-sky-100 text-sky-700 hover:bg-sky-200 py-2 rounded-lg font-medium transition border border-sky-300"></button>
+        <button onclick="removeColumn()" data-i18n="delCol" class="bg-orange-100 text-orange-700 hover:bg-orange-200 py-2 rounded-lg font-medium transition border border-orange-300"></button>
+      </div>
+      <p class="text-xs text-slate-500 mt-2" data-i18n="colTip"></p>
+    </div>
+
+    <div class="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+      <h2 class="text-xl font-semibold mb-4 text-blue-700 border-b pb-2" data-i18n="s2"></h2>
+
+      <div class="mb-4">
+        <div class="flex items-center justify-between mb-1">
+          <label for="chartTitleInput" class="text-sm font-medium" data-i18n="titleLabel"></label>
+          <label class="flex items-center gap-1 text-xs text-slate-600 cursor-pointer select-none">
+            <input type="checkbox" id="showChartTitle" checked onchange="toggleChartTitle()" class="w-4 h-4 accent-blue-600">
+            <span data-i18n="showTitleChk"></span>
+          </label>
+        </div>
+        <input type="text" id="chartTitleInput" oninput="refreshChart()" class="w-full p-2 border border-slate-300 rounded focus:border-blue-500 focus:outline-none text-sm">
+      </div>
+
+      <div class="grid grid-cols-2 gap-4 mb-4">
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label for="xAxisLabel" class="text-sm font-medium" data-i18n="xLabel"></label>
+            <label class="flex items-center gap-1 text-xs text-slate-600 cursor-pointer select-none">
+              <input type="checkbox" id="showXTitle" checked onchange="toggleAxisTitle()" class="w-4 h-4 accent-blue-600">
+              <span data-i18n="showTitle"></span>
+            </label>
+          </div>
+          <input type="text" id="xAxisLabel" class="w-full p-2 border border-slate-300 rounded focus:border-blue-500 focus:outline-none text-sm">
+        </div>
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label for="yAxisLabel" class="text-sm font-medium" data-i18n="yLabel"></label>
+            <label class="flex items-center gap-1 text-xs text-slate-600 cursor-pointer select-none">
+              <input type="checkbox" id="showYTitle" checked onchange="toggleAxisTitle()" class="w-4 h-4 accent-blue-600">
+              <span data-i18n="showTitle"></span>
+            </label>
+          </div>
+          <input type="text" id="yAxisLabel" class="w-full p-2 border border-slate-300 rounded focus:border-blue-500 focus:outline-none text-sm">
+        </div>
+      </div>
+
+      <label class="block text-sm font-medium mb-2" data-i18n="chartType"></label>
+      <select id="chartType" onchange="onTypeChange()" class="block w-full pl-3 pr-10 py-3 text-base border border-slate-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-lg bg-slate-50"></select>
+      <p id="typeHint" class="text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded p-2 mt-2"></p>
+
+      <label for="paletteSel" class="block text-sm font-medium mt-4 mb-2" data-i18n="palette"></label>
+      <div class="flex items-center gap-3">
+        <select id="paletteSel" onchange="onPaletteChange()" class="flex-1 pl-3 pr-10 py-2.5 text-sm border border-slate-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 rounded-lg bg-slate-50"></select>
+        <div id="palPreview" class="flex rounded overflow-hidden border border-slate-300 shrink-0"></div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-3 mt-4">
+        <label class="flex items-center gap-2 text-sm font-medium cursor-pointer">
+          <input type="checkbox" id="showLabels" checked onchange="refreshChart()" class="w-4 h-4 accent-blue-600">
+          <span data-i18n="showLabels"></span>
+        </label>
+        <select id="labelMode" onchange="refreshChart()" class="p-1.5 border border-slate-300 rounded text-sm bg-slate-50"></select>
+      </div>
+
+      <button onclick="createChart()" data-i18n="create" class="w-full mt-6 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg shadow-lg transition hover:-translate-y-1 hover:shadow-xl"></button>
+    </div>
+  </div>
+
+  <!-- Right panel -->
+  <div class="lg:col-span-7 space-y-6 min-w-0">
+    <div class="bg-white p-4 rounded-xl shadow-md border border-slate-200">
+      <div class="flex justify-between items-center mb-2 px-2">
+        <h2 class="text-xl font-semibold text-slate-700" data-i18n="output"></h2>
+        <button onclick="downloadChart()" class="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded border border-gray-300 transition">⬇ Save .PNG</button>
+      </div>
+      <div id="chartDiv" class="w-full chart-container bg-slate-50 rounded-lg overflow-hidden relative border border-slate-100"></div>
+    </div>
+
+    <div class="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+      <div class="flex justify-between items-center border-b pb-2 mb-4">
+        <h2 class="text-xl font-semibold text-blue-700" data-i18n="analysis"></h2>
+        <button onclick="analyzeData()" data-i18n="analyze" class="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-sm transition"></button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm text-center">
+          <thead class="bg-slate-100">
+            <tr>
+              <th class="p-2 text-left" data-i18n="colSeries"></th>
+              <th class="p-2" data-i18n="count"></th>
+              <th class="p-2" data-i18n="sum"></th>
+              <th class="p-2" data-i18n="avg"></th>
+              <th class="p-2" data-i18n="min"></th>
+              <th class="p-2" data-i18n="max"></th>
+            </tr>
+          </thead>
+          <tbody id="statBody"></tbody>
+        </table>
+      </div>
+      <div id="regressionInfo" class="hidden mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800">
+        <p class="font-bold mb-1" data-i18n="regTitle"></p>
+        <p id="regEquation" class="font-mono text-sm whitespace-pre-line"></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== i18n : [Thai, English] =====
+const D = {
+  reset:['รีเซ็ตหน้าเว็บ (Reset)','Reset page'],
+  resetConfirm:['ต้องการล้างข้อมูลทั้งหมดใช่หรือไม่?','Clear all data?'],
+  s1:['1. กรอกข้อมูล (Input Data)','1. Input Data'],
+  idx:['ที่','#'], xCol:['แกน X (ข้อความ/ตัวเลข)','X axis (text/number)'],
+  series:['ชุดข้อมูล','Series'], label:['ป้ายชื่อ','Label'],
+  addRow:['+ เพิ่มแถว','+ Add row'], delRow:['− ลบแถว','− Remove row'],
+  addCol:['+ เพิ่มคอลัมน์','+ Add column'], delCol:['− ลบคอลัมน์','− Remove column'],
+  colTip:['เพิ่มคอลัมน์ได้ไม่จำกัด แต่ละคอลัมน์คือตัวแปร Y หนึ่งตัว ตั้งชื่อได้ที่หัวคอลัมน์ กด × เพื่อลบคอลัมน์นั้น','Add unlimited columns. Each column is one Y variable; rename it in the header and press × to delete it.'],
+  s2:['2. เลือกประเภทกราฟ','2. Choose chart type'],
+  xLabel:['ชื่อแกน X','X axis title'], yLabel:['ชื่อแกน Y','Y axis title'],
+  chartType:['รูปแบบกราฟ','Chart type'],
+  create:['สร้างกราฟ (Create Chart)','Create Chart'],
+  output:['ผลลัพธ์กราฟ','Chart output'],
+  ph:['กรุณากรอกข้อมูลและกดปุ่ม "สร้างกราฟ"','Enter your data and press "Create Chart"'],
+  analysis:['การวิเคราะห์ข้อมูล','Data analysis'], analyze:['วิเคราะห์ข้อมูล','Analyze data'],
+  colSeries:['ตัวแปร','Variable'], count:['จำนวน','Count'], sum:['ผลรวม','Sum'], avg:['ค่าเฉลี่ย','Average'], min:['ต่ำสุด','Min'], max:['สูงสุด','Max'],
+  regTitle:['📉 ผลการวิเคราะห์ Regression:','📉 Regression results:'],
+  minRow:['ต้องมีข้อมูลอย่างน้อย 1 แถว','At least 1 row is required'],
+  minCol:['ต้องมีอย่างน้อย 1 คอลัมน์ Y','At least 1 Y column is required'],
+  needData:['กรุณากรอกข้อมูลอย่างน้อย 1 แถว (แกน X และ Y อย่างน้อย 1 ค่า)','Enter at least 1 row (X value and at least one Y value)'],
+  regNum:['Regression ต้องใช้แกน X เป็นตัวเลขเท่านั้น (และมีอย่างน้อย 2 จุด)','Regression needs a numeric X axis with at least 2 points'],
+  saveFirst:['กรุณาสร้างกราฟก่อนบันทึก','Create a chart before saving'],
+  chartTitle:['การแสดงผลข้อมูล','Data Visualization'],
+  xAxis:['แกน X','X Axis'], yAxis:['แกน Y','Y Axis'], secAxis:['แกน Y ฝั่งขวา','Secondary Y axis'],
+  fit:['เส้นถดถอย','fit'], size:['ขนาด','size'], color:['สี','color'], total:['รวม','Total'],
+  tBar:['แท่ง','Bar'], tLine:['เส้น','Line'], tLine2:['เส้น (แกนขวา)','Line (right axis)'],
+  o_bar:['📊 กราฟแท่ง (Bar / แบบกลุ่มเมื่อมีหลายตัวแปร)','📊 Bar (grouped when multiple variables)'],
+  o_stackbar:['📚 กราฟแท่งซ้อน (Stacked Bar)','📚 Stacked Bar'],
+  o_line:['📈 กราฟเส้น (Line / หลายเส้น)','📈 Line (multi-line)'],
+  o_area:['🏔️ กราฟพื้นที่ (Area)','🏔️ Area'],
+  o_stackarea:['🏞️ กราฟพื้นที่ซ้อน (Stacked Area)','🏞️ Stacked Area'],
+  o_combo:['🔀 กราฟผสม แท่ง+เส้น (Combo)','🔀 Combo (bar + line)'],
+  o_scatter:['📍 แผนภาพการกระจาย (Scatter)','📍 Scatter plot'],
+  o_regression:['📉 สหสัมพันธ์ & สมการถดถอย (Regression)','📉 Correlation & Regression'],
+  o_pie:['🥧 กราฟวงกลม (Pie)','🥧 Pie'], o_donut:['🍩 กราฟโดนัท (Donut)','🍩 Donut'],
+  o_radar:['🕸️ กราฟเรดาร์ (Radar / หลายชุด)','🕸️ Radar (multi-series)'],
+  o_bubble:['🫧 กราฟฟองอากาศ (Bubble 3-4 ตัวแปร)','🫧 Bubble (3–4 variables)'],
+  o_treemap:['🔲 แผนภูมิต้นไม้ (Treemap)','🔲 Treemap'], o_sunburst:['☀️ Sunburst','☀️ Sunburst'],
+  o_heatmap:['🟧 แผนที่ความร้อน (Heatmap)','🟧 Heatmap'],
+  h_default:['ใช้ได้ทั้ง 1 ตัวแปร และหลายตัวแปร (เพิ่มคอลัมน์ Y เพื่อเปรียบเทียบ)','Works with one or many variables (add Y columns to compare).'],
+  h_combo:['เลือกชนิดของแต่ละคอลัมน์ที่หัวตาราง: แท่ง / เส้น / เส้นแกนขวา (เหมาะกับหน่วยต่างกัน เช่น ยอดขาย + เปอร์เซ็นต์)','Pick each column\'s type in its header: bar / line / line on right axis (good for mixed units, e.g. sales + %).'],
+  h_bubble:['ต้องมีอย่างน้อย 2 คอลัมน์: คอลัมน์ 1 = ตำแหน่งแกน Y, คอลัมน์ 2 = ขนาดฟอง, คอลัมน์ 3 (ถ้ามี) = สี','Needs 2+ columns: column 1 = Y position, column 2 = bubble size, column 3 (optional) = color.'],
+  h_pie:['แต่ละคอลัมน์จะได้กราฟวงกลมของตัวเอง แสดงเรียงกัน','Each column gets its own chart, shown side by side.'],
+  h_regression:['แกน X ต้องเป็นตัวเลข จะคำนวณสมการถดถอยแยกให้ทุกคอลัมน์','X must be numeric. A separate regression is computed for every column.'],
+  h_treemap:['มีหลายคอลัมน์จะจัดเป็นลำดับชั้น: รวม → ตัวแปร → ป้ายชื่อ X','With several columns it nests: Total → variable → X label.'],
+  h_heatmap:['แถว = ตัวแปร, คอลัมน์ = ค่า X เหมาะกับหลายตัวแปรที่หน่วยใกล้เคียงกัน','Rows = variables, columns = X values. Best with comparable units.']
+};
+D.impFile=['📁 นำเข้าไฟล์ Excel / CSV','📁 Import Excel / CSV file'];
+D.impPaste=['📋 วางข้อมูลจาก Excel','📋 Paste from Excel'];
+D.impTip=['ลากไฟล์ .xlsx .xls .csv มาวางในกรอบนี้ได้ หรือคัดลอกช่วงเซลล์จาก Excel แล้วกด Ctrl+V ในช่องตารางด้านล่างได้โดยตรง (คอลัมน์แรก = แกน X ที่เหลือ = ตัวแปร Y)','Drop an .xlsx / .xls / .csv file here, or copy cells in Excel and press Ctrl+V inside the table below (first column = X axis, others = Y variables).'];
+D.hasHeader=['แถวแรกเป็นหัวคอลัมน์','First row is header'];
+D.sheet=['ชีต:','Sheet:'];
+D.impDo=['นำเข้าข้อมูลที่วาง','Import pasted data'];
+D.impOk=['นำเข้าสำเร็จ','Imported'];
+D.rowsW=['แถว','rows']; D.colsW=['คอลัมน์ Y','Y columns'];
+D.pasteOk=['วางข้อมูลแล้ว','Pasted'];
+D.impEmpty=['ไม่พบข้อมูลที่นำเข้าได้','No importable data found'];
+D.impErr=['อ่านไฟล์ไม่สำเร็จ','Could not read the file'];
+D.impLib=['โหลดตัวอ่านไฟล์ Excel ไม่สำเร็จ (ตรวจสอบอินเทอร์เน็ต)','Excel reader failed to load (check your connection)'];
+D.useRows=['ติ๊กเพื่อเลือก/ไม่เลือกทุกแถว','Tick to select / deselect all rows'];
+D.useCol=['ใช้คอลัมน์นี้สร้างกราฟ','Use this column in the chart'];
+D.allCols=['✓ เลือกทุกคอลัมน์','✓ All columns']; D.noCols=['✗ ล้างการเลือกคอลัมน์','✗ Clear columns'];
+D.selTip=['ติ๊กช่อง ☑ หน้าแถว หรือที่หัวคอลัมน์ เพื่อเลือกว่าข้อมูลส่วนไหนจะถูกนำไปสร้างกราฟและวิเคราะห์ (ที่ไม่ติ๊กจะไม่ถูกนำมาใช้ แต่ข้อมูลยังอยู่ในตาราง)','Use the ☑ box in front of a row or in a column header to choose which data goes into the chart and analysis. Unticked data stays in the table but is ignored.'];
+D.selUse=['เลือกใช้','Using']; D.varsW=['ตัวแปร','variables'];
+D.needSel=['กรุณาเลือกข้อมูลอย่างน้อย 1 แถว และ 1 คอลัมน์ ที่จะนำไปสร้างกราฟ','Select at least 1 row and 1 column to chart'];
+D.showTitle=['แสดงชื่อแกน','Show title'];
+D.titleLabel=['หัวข้อกราฟ','Chart title'];
+D.showTitleChk=['แสดงหัวข้อ','Show title'];
+D.palette=['โทนสีของกราฟ','Color theme'];
+D.p_default=['🎨 หลากสี (ค่าเริ่มต้น)','🎨 Multicolor (default)'];
+D.p_ocean=['🌊 ทะเล (ฟ้า-เขียวน้ำทะเล)','🌊 Ocean (blue-teal)'];
+D.p_sunset=['🌅 อบอุ่น (แดง-ส้ม-เหลือง)','🌅 Warm (red-orange-yellow)'];
+D.p_forest=['🌿 ธรรมชาติ (เขียว)','🌿 Forest (green)'];
+D.p_purple=['💜 ม่วง-ชมพู','💜 Purple-pink'];
+D.p_pastel=['🍬 พาสเทล','🍬 Pastel'];
+D.p_earth=['🟤 เอิร์ธโทน (น้ำตาล)','🟤 Earth tones'];
+D.p_gray=['⚫ ขาว-ดำ / เทา (เหมาะพิมพ์)','⚫ Grayscale (print-friendly)'];
+D.showLabels=['แสดง Label บนกราฟ','Show labels on chart'];
+D.lbl_value=['เฉพาะค่าตัวเลข','Value only'];
+D.lbl_name=['เฉพาะชื่อ (แกน X)','Name only (X label)'];
+D.lbl_both=['ชื่อ + ค่า','Name + value'];
+D.h_donut=D.h_pie; D.h_sunburst=D.h_treemap;
+const TYPES=['bar','stackbar','line','area','stackarea','combo','scatter','regression','pie','donut','radar','bubble','treemap','sunburst','heatmap'];
+let lang='th';
+const t=k=>D[k][lang==='th'?0:1];
+const $=id=>document.getElementById(id);
+const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const PALS={
+  default:{c:['#2563EB','#F97316','#16A34A','#DC2626','#7C3AED','#0891B2','#CA8A04','#DB2777','#4B5563','#65A30D'],scale:'Viridis'},
+  ocean:{c:['#0B5C8E','#14A3A8','#3B82C4','#0E7C66','#5BC0DE','#1E3A8A','#2DD4BF','#6BA6D6'],scale:[[0,'#E0F2FE'],[0.5,'#38A3C7'],[1,'#0B3C5D']]},
+  sunset:{c:['#DC2626','#F97316','#F59E0B','#BE185D','#EAB308','#9A3412','#FB7185','#EA580C'],scale:[[0,'#FEF9C3'],[0.5,'#F97316'],[1,'#7F1D1D']]},
+  forest:{c:['#15803D','#65A30D','#0F766E','#4D7C0F','#22C55E','#166534','#84CC16','#14B8A6'],scale:[[0,'#ECFCCB'],[0.5,'#4ADE80'],[1,'#14532D']]},
+  purple:{c:['#7C3AED','#DB2777','#A855F7','#4C1D95','#F472B6','#C026D3','#6D28D9','#E879F9'],scale:[[0,'#FAE8FF'],[0.5,'#C026D3'],[1,'#3B0764']]},
+  pastel:{c:['#93C5FD','#FCA5A5','#86EFAC','#FDE68A','#C4B5FD','#FDBA74','#99F6E4','#F9A8D4'],scale:[[0,'#FFF7ED'],[0.5,'#FBCFE8'],[1,'#A5B4FC']]},
+  earth:{c:['#92400E','#A16207','#4D7C0F','#78350F','#B45309','#57534E','#365314','#CA8A04'],scale:[[0,'#FEF3C7'],[0.5,'#B45309'],[1,'#44403C']]},
+  gray:{c:['#111827','#6B7280','#374151','#9CA3AF','#4B5563','#D1D5DB','#1F2937','#E5E7EB'],scale:[[0,'#F3F4F6'],[1,'#111827']]}
+};
+let palKey='default';
+const PAL=()=>PALS[palKey].c;
+const col=i=>PAL()[i%PAL().length];
+const hue=(i,n)=>palKey==='default'?`hsl(${(i*360)/n},70%,50%)`:col(i);
+const CS=()=>PALS[palKey].scale;
+const tbody=$('dataTableBody'), headRow=$('headRow');
+
+// ===== Language =====
+function setLang(l){ lang=l; applyLang(); }
+function applyLang(){
+  document.documentElement.lang=lang;
+  document.querySelectorAll('[data-i18n]').forEach(e=>e.textContent=t(e.dataset.i18n));
+  const sel=$('chartType'), cur=sel.value||'bar';
+  sel.innerHTML=TYPES.map(v=>`<option value="${v}">${t('o_'+v)}</option>`).join('');
+  sel.value=cur;
+  const ps=$('paletteSel');
+  ps.innerHTML=Object.keys(PALS).map(k=>`<option value="${k}">${t('p_'+k)}</option>`).join('');
+  ps.value=palKey; renderPalPreview();
+  $('chartTitleInput').placeholder=t('chartTitle');
+  const lm=$('labelMode'), lcur=lm.value||'value';
+  lm.innerHTML=['value','name','both'].map(v=>`<option value="${v}">${t('lbl_'+v)}</option>`).join('');
+  lm.value=lcur;
+  $('xAxisLabel').placeholder=lang==='th'?'เช่น ปี, เดือน':'e.g. Year, Month';
+  $('yAxisLabel').placeholder=lang==='th'?'เช่น ยอดขาย, จำนวน':'e.g. Sales, Count';
+  document.querySelectorAll('[data-i18n-title]').forEach(e=>e.title=t(e.dataset.i18nTitle));
+  headRow.querySelectorAll('.s-use').forEach(c=>c.title=t('useCol'));
+  updateSel();
+  headRow.querySelectorAll('.s-name').forEach((el,i)=>el.placeholder=`${t('series')} ${i+1}`);
+  headRow.querySelectorAll('.s-type').forEach(s=>[...s.options].forEach(o=>o.textContent=t(o.dataset.k)));
+  [...tbody.rows].forEach((tr,i)=>tr.querySelector('.x-input').placeholder=`${t('label')} ${i+1}`);
+  $('pasteArea').placeholder=lang==='th'?'วางข้อมูลที่คัดลอกจาก Excel ที่นี่ (Ctrl+V)':'Paste data copied from Excel here (Ctrl+V)';
+  onTypeChange();
+  $('langTh').className='px-3 py-1.5 transition '+(lang==='th'?'bg-white text-blue-700 font-semibold':'hover:bg-white/20');
+  $('langEn').className='px-3 py-1.5 transition '+(lang==='en'?'bg-white text-blue-700 font-semibold':'hover:bg-white/20');
+  const ph=$('chartPlaceholder');
+  if(ph) ph.querySelector('p').textContent=t('ph');
+  if($('chartDiv')._fullLayout) createChart(); else if($('statBody').children.length) analyzeData();
+}
+function renderPalPreview(){
+  $('palPreview').innerHTML=PAL().slice(0,6).map(c=>`<span style="display:block;width:18px;height:28px;background:${c}"></span>`).join('');
+}
+function recolorDots(){ headRow.querySelectorAll('.s-dot').forEach((el,i)=>el.style.background=col(i)); }
+function onPaletteChange(){
+  palKey=$('paletteSel').value; renderPalPreview(); recolorDots();
+  if($('statBody').children.length) analyzeData();
+  refreshChart();
+}
+function toggleChartTitle(){
+  $('chartTitleInput').disabled=!$('showChartTitle').checked;
+  $('chartTitleInput').classList.toggle('bg-slate-100',$('chartTitleInput').disabled);
+  refreshChart();
+}
+function toggleAxisTitle(){
+  $('xAxisLabel').disabled=!$('showXTitle').checked;
+  $('yAxisLabel').disabled=!$('showYTitle').checked;
+  $('xAxisLabel').classList.toggle('bg-slate-100',$('xAxisLabel').disabled);
+  $('yAxisLabel').classList.toggle('bg-slate-100',$('yAxisLabel').disabled);
+  refreshChart();
+}
+function onTypeChange(){
+  const ty=$('chartType').value;
+  $('typeHint').textContent=t('h_'+ty in D?'h_'+ty:'h_default');
+  headRow.querySelectorAll('.s-type').forEach(s=>s.classList.toggle('hidden',ty!=='combo'));
+}
+
+// ===== Table (unlimited rows & columns) =====
+const seriesCount=()=>headRow.querySelectorAll('.s-th').length;
+const cell=()=>{const td=document.createElement('td');td.className='p-2';td.innerHTML='<input type="number" step="any" class="y-input w-full min-w-[110px] p-2 border border-slate-300 rounded focus:border-blue-500 focus:outline-none" placeholder="0">';return td;};
+
+function addRow(){
+  const n=tbody.rows.length+1, tr=document.createElement('tr');
+  tr.className='border-b hover:bg-slate-50';
+  tr.innerHTML=`<td class="p-2 text-center text-slate-400 text-sm whitespace-nowrap"><label class="inline-flex items-center gap-1 cursor-pointer"><input type="checkbox" class="row-use w-4 h-4 accent-blue-600" checked>${n}</label></td><td class="p-2"><input type="text" class="x-input w-full min-w-[110px] p-2 border border-slate-300 rounded focus:border-blue-500 focus:outline-none" placeholder="${t('label')} ${n}"></td>`;
+  for(let i=0;i<seriesCount();i++) tr.appendChild(cell());
+  tbody.appendChild(tr); updateSel();
+}
+function removeRow(){
+  if(tbody.rows.length>1){ tbody.deleteRow(-1); updateSel(); } else alert(t('minRow'));
+}
+function addColumn(){
+  const i=seriesCount(), th=document.createElement('th');
+  th.className='s-th p-2 border-b align-top min-w-[140px]';
+  th.innerHTML=`<div class="flex items-center gap-1"><input type="checkbox" class="s-use w-4 h-4 accent-blue-600 shrink-0" checked title="${t('useCol')}"><span class="s-dot w-2 h-6 rounded shrink-0" style="background:${col(i)}"></span>
+    <input type="text" class="s-name w-full p-1.5 border border-slate-300 rounded text-sm font-normal focus:border-blue-500 focus:outline-none" placeholder="${t('series')} ${i+1}">
+    <button type="button" onclick="removeColumn(this)" class="text-red-500 hover:text-red-700 font-bold px-1" title="×">×</button></div>
+    <select class="s-type hidden mt-1 w-full p-1 border border-slate-300 rounded text-xs font-normal bg-white">
+      <option value="bar" data-k="tBar" ${i===0?'selected':''}>${t('tBar')}</option>
+      <option value="line" data-k="tLine" ${i>0?'selected':''}>${t('tLine')}</option>
+      <option value="line2" data-k="tLine2">${t('tLine2')}</option></select>`;
+  headRow.appendChild(th);
+  [...tbody.rows].forEach(tr=>tr.appendChild(cell()));
+  onTypeChange(); updateSel();
+}
+function removeColumn(btn){
+  if(seriesCount()<=1){alert(t('minCol'));return;}
+  const ths=[...headRow.querySelectorAll('.s-th')];
+  const idx=btn?ths.indexOf(btn.closest('th')):ths.length-1;
+  ths[idx].remove();
+  [...tbody.rows].forEach(tr=>tr.deleteCell(idx+2));
+  headRow.querySelectorAll('.s-name').forEach((el,i)=>el.placeholder=`${t('series')} ${i+1}`);
+  updateSel();
+}
+function initTable(rows,cols){
+  headRow.querySelectorAll('.s-th').forEach(e=>e.remove());
+  tbody.innerHTML='';
+  for(let i=0;i<cols;i++) addColumn();
+  for(let i=0;i<rows;i++) addRow();
+}
+
+// ===== Selection of data used for chart =====
+let selTimer;
+function updateSel(){ clearTimeout(selTimer); selTimer=setTimeout(doSel,0); }
+function doSel(){
+  const rows=[...tbody.rows], ths=[...headRow.querySelectorAll('.s-th')];
+  const ru=rows.map(tr=>tr.querySelector('.row-use').checked);
+  const cu=ths.map(th=>th.querySelector('.s-use').checked);
+  rows.forEach((tr,i)=>{
+    tr.classList.toggle('opacity-40',!ru[i]);
+    cu.forEach((on,j)=>{ const td=tr.cells[j+2]; if(td) td.classList.toggle('bg-slate-200',!on); });
+  });
+  ths.forEach((th,j)=>th.classList.toggle('bg-slate-200',!cu[j]));
+  recolorDots();
+  const nr=ru.filter(Boolean).length, nc=cu.filter(Boolean).length, all=$('rowAll');
+  all.checked=nr===rows.length&&rows.length>0; all.indeterminate=nr>0&&nr<rows.length;
+  $('selInfo').textContent=`${t('selUse')}: ${nr}/${rows.length} ${t('rowsW')} · ${nc}/${ths.length} ${t('varsW')}`;
+}
+function setAllCols(on){
+  headRow.querySelectorAll('.s-use').forEach(c=>c.checked=on);
+  updateSel(); refreshChart();
+}
+$('rowAll').addEventListener('change',e=>{
+  tbody.querySelectorAll('.row-use').forEach(c=>c.checked=e.target.checked);
+  updateSel(); refreshChart();
+});
+[tbody,headRow].forEach(el=>el.addEventListener('change',e=>{
+  if(e.target.matches('.row-use,.s-use')){ updateSel(); refreshChart(); }
+}));
+
+function resetChartArea(){
+  Plotly.purge('chartDiv');
+  $('chartDiv').innerHTML=`<div id="chartPlaceholder" class="absolute inset-0 flex items-center justify-center text-slate-400 pointer-events-none"><div class="text-center"><div class="text-5xl mb-2 opacity-50">📊</div><p>${t('ph')}</p></div></div>`;
+  $('statBody').innerHTML='';
+  $('regressionInfo').classList.add('hidden');
+}
+function resetPage(){
+  if(!confirm(t('resetConfirm'))) return;
+  initTable(5,2); resetChartArea();
+  $('xAxisLabel').value=''; $('yAxisLabel').value=''; $('chartTitleInput').value='';
+}
+
+// ===== Import: Excel file / paste =====
+let WB=null, lastMatrix=null;
+const cleanStr=v=>v==null?'':String(v).trim();
+function parseNum(v){
+  if(v==null||v==='') return null;
+  if(typeof v==='number') return isFinite(v)?v:null;
+  let x=String(v).trim().replace(/[,\s]/g,'').replace(/%$/,'');
+  if(x===''||x==='-') return null;
+  const n=Number(x); return isFinite(n)?n:null;
+}
+function parseTSV(text){
+  const rows=[]; let row=[],cur='',q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){
+      if(c==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=c;
+    } else if(c==='"'&&cur===''){ q=true; }
+    else if(c==='\t'){ row.push(cur); cur=''; }
+    else if(c==='\n'||c==='\r'){ if(c==='\r'&&text[i+1]==='\n') i++; row.push(cur); rows.push(row); row=[]; cur=''; }
+    else cur+=c;
+  }
+  if(cur!==''||row.length){ row.push(cur); rows.push(row); }
+  return rows;
+}
+function tidy(m){
+  m=m.map(r=>r.map(cleanStr));
+  while(m.length&&m[m.length-1].every(c=>c==='')) m.pop();
+  while(m.length&&m[0].every(c=>c==='')) m.shift();
+  return m;
+}
+// does row look like a header (text labels over numeric data)?
+function looksHeader(m,fromCol=1){
+  if(m.length<2) return false;
+  const h=m[0].slice(fromCol).filter(c=>c!==''); if(!h.length) return false;
+  if(h.some(c=>parseNum(c)!==null)) return false;
+  return m[1].slice(fromCol).some(c=>parseNum(c)!==null);
+}
+function setMsg(txt,ok=true){
+  const el=$('importMsg'); el.textContent=txt; el.className='text-xs mt-2 '+(ok?'text-emerald-700':'text-red-600');
+}
+// Write a matrix into the table. col 0 = X, col k>=1 = series k
+function applyMatrix(m,{r0=0,c0=0,header=false,replace=false}={}){
+  m=tidy(m); if(!m.length){setMsg(t('impEmpty'),false);return false;}
+  const hdr=header?m[0]:null, data=header?m.slice(1):m;
+  const width=Math.max(...m.map(r=>r.length));
+  if(!data.length&&!hdr){setMsg(t('impEmpty'),false);return false;}
+  if(replace){
+    initTable(Math.max(data.length,1),Math.max(width-1,1)); r0=0; c0=0;
+    $('xAxisLabel').value=''; $('yAxisLabel').value=''; resetChartArea();
+  } else {
+    while(tbody.rows.length<r0+data.length) addRow();
+    while(seriesCount()<c0+width-1) addColumn();
+  }
+  if(hdr){
+    const names=[...headRow.querySelectorAll('.s-name')];
+    hdr.forEach((h,j)=>{
+      const k=c0+j;
+      if(k===0){ if(h&&!$('xAxisLabel').value) $('xAxisLabel').value=h; }
+      else if(names[k-1]) names[k-1].value=h;
+    });
+  }
+  data.forEach((row,i)=>{
+    const tr=tbody.rows[r0+i]; if(!tr) return;
+    const ys=tr.querySelectorAll('.y-input');
+    row.forEach((v,j)=>{
+      const k=c0+j;
+      if(k===0) tr.querySelector('.x-input').value=v;
+      else if(ys[k-1]){ const n=parseNum(v); ys[k-1].value=n===null?'':String(n); }
+    });
+  });
+  return {rows:data.length,cols:Math.max(width-1,1)};
+}
+function showImportResult(res,key){
+  if(res) setMsg(`✓ ${t(key)}: ${res.rows} ${t('rowsW')} × ${res.cols} ${t('colsW')}`);
+}
+// --- file ---
+function toMatrix(ws){
+  const raw=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:'',blankrows:false});
+  const pad=n=>String(n).padStart(2,'0');
+  return raw.map(r=>r.map(v=>{
+    if(v instanceof Date) return `${v.getFullYear()}-${pad(v.getMonth()+1)}-${pad(v.getDate())}`;
+    return v;
+  }));
+}
+function handleFile(file){
+  if(!file) return;
+  if(typeof XLSX==='undefined'){setMsg(t('impLib'),false);return;}
+  $('fileName').textContent='📄 '+file.name;
+  const isText=/\.(csv|tsv|txt)$/i.test(file.name), fr=new FileReader();
+  fr.onerror=()=>setMsg(t('impErr'),false);
+  fr.onload=e=>{
+    try{
+      WB=XLSX.read(e.target.result,{type:isText?'string':'array',cellDates:true});
+      const sel=$('sheetSel');
+      sel.innerHTML=WB.SheetNames.map((n,i)=>`<option value="${i}">${esc(n)}</option>`).join('');
+      $('sheetRow').classList.toggle('hidden',WB.SheetNames.length<2);
+      $('sheetRow').classList.toggle('flex',WB.SheetNames.length>=2);
+      loadSheet();
+    }catch(err){ console.error(err); setMsg(t('impErr'),false); }
+  };
+  isText?fr.readAsText(file,'UTF-8'):fr.readAsArrayBuffer(file);
+}
+function loadSheet(){
+  if(!WB) return;
+  const ws=WB.Sheets[WB.SheetNames[+$('sheetSel').value||0]];
+  const m=tidy(toMatrix(ws));
+  if(!m.length){setMsg(t('impEmpty'),false);return;}
+  lastMatrix=m;
+  $('hasHeader').checked=looksHeader(m);
+  reapplyImport();
+}
+function reapplyImport(){
+  if(!lastMatrix) return;
+  showImportResult(applyMatrix(lastMatrix,{header:$('hasHeader').checked,replace:true}),'impOk');
+}
+// --- paste box (textarea) ---
+function togglePaste(){ $('pasteBox').classList.toggle('hidden'); if(!$('pasteBox').classList.contains('hidden')) $('pasteArea').focus(); }
+function importPasted(){
+  const m=tidy(parseTSV($('pasteArea').value));
+  if(!m.length){setMsg(t('impEmpty'),false);return;}
+  lastMatrix=m; WB=null; $('fileName').textContent=''; $('sheetRow').classList.add('hidden'); $('sheetRow').classList.remove('flex');
+  $('hasHeader').checked=looksHeader(m);
+  reapplyImport();
+}
+// --- direct paste into table cells ---
+tbody.addEventListener('paste',e=>{
+  const inp=e.target; if(!inp.matches||!inp.matches('input')) return;
+  const text=(e.clipboardData||window.clipboardData).getData('text'); if(!text) return;
+  e.preventDefault();
+  const tr=inp.closest('tr'), r0=[...tbody.rows].indexOf(tr);
+  const c0=inp.classList.contains('x-input')?0:[...tr.querySelectorAll('.y-input')].indexOf(inp)+1;
+  let m=parseTSV(text);
+  if(m.length===1&&m[0].length===1){ // single value
+    inp.value=inp.classList.contains('x-input')?cleanStr(m[0][0]):(parseNum(m[0][0])??'');
+    return;
+  }
+  m=tidy(m);
+  const header=r0===0&&looksHeader(m,c0===0?1:0);
+  showImportResult(applyMatrix(m,{r0,c0,header}),'pasteOk');
+});
+// --- drag & drop + file input ---
+$('fileInput').addEventListener('change',e=>{handleFile(e.target.files[0]);e.target.value='';});
+['dragenter','dragover'].forEach(ev=>$('importBox').addEventListener(ev,e=>{e.preventDefault();$('importBox').classList.add('drag');}));
+['dragleave','drop'].forEach(ev=>$('importBox').addEventListener(ev,e=>{e.preventDefault();$('importBox').classList.remove('drag');}));
+$('importBox').addEventListener('drop',e=>handleFile(e.dataTransfer.files[0]));
+
+// ===== Data extraction =====
+function getData(){
+  const names=[...headRow.querySelectorAll('.s-name')].map((el,i)=>el.value.trim()||`${t('series')} ${i+1}`);
+  const types=[...headRow.querySelectorAll('.s-type')].map(s=>s.value);
+  const use=[...headRow.querySelectorAll('.s-use')].map(c=>c.checked);
+  const x=[], ys=names.map(()=>[]);
+  [...tbody.rows].forEach(tr=>{
+    if(!tr.querySelector('.row-use').checked) return;
+    const xv=tr.querySelector('.x-input').value.trim();
+    const vals=[...tr.querySelectorAll('.y-input')].map(i=>{const v=parseFloat(i.value);return isNaN(v)?null:v;});
+    if(xv!==''&&vals.some(v=>v!==null)){x.push(xv);vals.forEach((v,i)=>ys[i].push(v));}
+  });
+  const series=names.map((name,i)=>({name,type:types[i],y:ys[i],idx:i})).filter(s=>use[s.idx]&&s.y.some(v=>v!==null));
+  if(!x.length||!series.length){
+    const anyRow=[...tbody.rows].some(tr=>tr.querySelector('.row-use').checked);
+    alert(anyRow&&use.some(Boolean)?t('needData'):t('needSel'));return null;
+  }
+  return {x,series};
+}
+
+// Hierarchy for treemap / sunburst
+function hier(d){
+  const ids=['root'],labels=[t('total')],parents=[''],values=[0],one=d.series.length===1;
+  let tot=0;
+  d.series.forEach(s=>{
+    let pid='root',si=-1;
+    if(!one){si=ids.length;pid='s'+s.idx;ids.push(pid);labels.push(s.name);parents.push('root');values.push(0);}
+    let st=0;
+    d.x.forEach((x,i)=>{const v=s.y[i];if(v!==null&&v>0){ids.push(pid+'|'+i);labels.push(x);parents.push(pid);values.push(v);st+=v;}});
+    if(si>=0) values[si]=st;
+    tot+=st;
+  });
+  values[0]=tot;
+  return {ids,labels,parents,values};
+}
+
+// ===== Chart =====
+function createChart(){
+  const d=getData(); if(!d) return;
+  $('chartPlaceholder')?.classList.add('hidden');
+  const type=$('chartType').value, S=d.series, multi=S.length>1, T=[];
+  const xl=$('xAxisLabel').value.trim()||t('xAxis'), yl=$('yAxisLabel').value.trim()||t('yAxis');
+  const showX=$('showXTitle').checked, showY=$('showYTitle').checked, showT=$('showChartTitle').checked;
+  const layout={
+    title:{text:showT?(esc($('chartTitleInput').value.trim())||t('chartTitle')):'',font:{size:22,family:'Prompt'}}, font:{family:'Prompt'},
+    xaxis:{title:showX?xl:''}, yaxis:{title:showY?yl:''},
+    paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)',
+    margin:{t:showT?70:30,l:60,r:40,b:60}, autosize:true,
+    showlegend:multi, legend:{orientation:'h',y:-0.2}
+  };
+  const mk=(s,o)=>Object.assign({name:s.name,x:d.x,y:s.y},o);
+  const reg=$('regressionInfo'); reg.classList.add('hidden');
+
+  switch(type){
+    case 'bar': case 'stackbar':
+      S.forEach(s=>T.push(mk(s,{type:'bar',text:s.y,textposition:'auto',marker:{color:multi?col(s.idx):d.x.map((_,i)=>hue(i,d.x.length))}})));
+      layout.barmode=type==='bar'?'group':'stack'; break;
+    case 'line':
+      S.forEach(s=>T.push(mk(s,{type:'scatter',mode:multi?'lines+markers':'lines+markers+text',text:s.y,textposition:'top center',line:{shape:'spline',width:3,color:col(s.idx)},marker:{size:8}}))); break;
+    case 'area': case 'stackarea':
+      S.forEach(s=>T.push(mk(s,{type:'scatter',mode:'lines+markers',fill:type==='area'?'tozeroy':'tonexty',stackgroup:type==='area'?undefined:'one',line:{color:col(s.idx),width:2}}))); break;
+    case 'scatter':
+      S.forEach(s=>T.push(mk(s,{type:'scatter',mode:multi?'markers':'markers+text',text:s.y,textposition:'top center',
+        marker:multi?{size:12,color:col(s.idx)}:{size:12,color:s.y,colorscale:CS(),showscale:true}}))); break;
+    case 'combo': {
+      let sec=false;
+      S.forEach(s=>{
+        const ty=s.type||(s.idx?'line':'bar');
+        if(ty==='bar') T.push(mk(s,{type:'bar',marker:{color:col(s.idx)},opacity:0.85}));
+        else {
+          const r=ty==='line2'; if(r) sec=true;
+          T.push(mk(s,{type:'scatter',mode:'lines+markers',yaxis:r?'y2':'y',name:r?`${s.name} (Y2)`:s.name,line:{width:3,color:col(s.idx)},marker:{size:8}}));
+        }
+      });
+      layout.barmode='group'; layout.showlegend=true;
+      if(sec) layout.yaxis2={overlaying:'y',side:'right',title:showY?t('secAxis'):'',showgrid:false};
+      break; }
+    case 'regression': {
+      if(!d.x.every(v=>!isNaN(parseFloat(v)))){alert(t('regNum'));$('chartPlaceholder')?.classList.remove('hidden');return;}
+      const lines=[];
+      S.forEach(s=>{
+        const pts=d.x.map((x,i)=>[parseFloat(x),s.y[i]]).filter(p=>p[1]!==null), n=pts.length;
+        if(n<2) return;
+        const sx=pts.reduce((a,p)=>a+p[0],0), sy=pts.reduce((a,p)=>a+p[1],0);
+        const sxy=pts.reduce((a,p)=>a+p[0]*p[1],0), sxx=pts.reduce((a,p)=>a+p[0]*p[0],0);
+        const den=n*sxx-sx*sx; if(!den) return;
+        const m=(n*sxy-sx*sy)/den, b=(sy-m*sx)/n, mx=sx/n, my=sy/n;
+        let a=0,bx=0,by=0; pts.forEach(([x,y])=>{a+=(x-mx)*(y-my);bx+=(x-mx)**2;by+=(y-my)**2;});
+        const r=a/Math.sqrt(bx*by), xs=pts.map(p=>p[0]), lo=Math.min(...xs), hi=Math.max(...xs);
+        T.push({x:xs,y:pts.map(p=>p[1]),mode:'markers',name:s.name,marker:{size:10,color:col(s.idx)}});
+        T.push({x:[lo,hi],y:[m*lo+b,m*hi+b],mode:'lines',name:`${s.name} (${t('fit')})`,line:{color:col(s.idx),width:3,dash:'dash'}});
+        lines.push(`${multi?s.name+': ':''}Y = ${m.toFixed(4)}X ${b<0?'-':'+'} ${Math.abs(b).toFixed(4)}  |  r = ${r.toFixed(4)}  |  R² = ${(r*r).toFixed(4)}`);
+      });
+      if(!lines.length){alert(t('regNum'));$('chartPlaceholder')?.classList.remove('hidden');return;}
+      layout.showlegend=true; reg.classList.remove('hidden'); $('regEquation').textContent=lines.join('\n');
+      break; }
+    case 'pie': case 'donut': {
+      const k=S.length, c=Math.ceil(Math.sqrt(k)), rw=Math.ceil(k/c);
+      layout.annotations=[]; layout.showlegend=true;
+      S.forEach((s,j)=>{
+        const ix=d.x.map((_,i)=>i).filter(i=>s.y[i]!==null&&s.y[i]>0);
+        const cx=j%c, cy=Math.floor(j/c);
+        const dom={x:[cx/c+0.03,(cx+1)/c-0.03],y:[1-(cy+1)/rw+0.03,1-cy/rw-0.08]};
+        T.push({type:'pie',name:s.name,labels:ix.map(i=>d.x[i]),values:ix.map(i=>s.y[i]),hole:type==='donut'?0.4:0,domain:dom,
+          textinfo:k>1?'percent':'label+value+percent',showlegend:j===0,marker:{colors:ix.map(i=>hue(i,d.x.length))}});
+        if(k>1) layout.annotations.push({text:`<b>${esc(s.name)}</b>`,showarrow:false,xref:'paper',yref:'paper',x:(dom.x[0]+dom.x[1])/2,y:dom.y[1],yanchor:'bottom'});
+      });
+      break; }
+    case 'radar': {
+      let mx=0;
+      S.forEach(s=>{
+        const y=s.y.map(v=>v??0); mx=Math.max(mx,...y);
+        T.push({type:'scatterpolar',name:s.name,r:[...y,y[0]],theta:[...d.x,d.x[0]],fill:'toself',opacity:multi?0.55:0.8,mode:'lines+markers',line:{color:col(s.idx)}});
+      });
+      layout.polar={radialaxis:{visible:true,range:[0,mx*1.1||1]}}; break; }
+    case 'bubble': {
+      const a=S[0], b=S[1]||a, c=S[2];
+      const sz=b.y.map(v=>Math.max(v??0,0)), mxs=Math.max(...sz)||1;
+      const hov=d.x.map((x,i)=>`${esc(x)}<br>${esc(a.name)}: ${a.y[i]}`+(S[1]?`<br>${esc(b.name)} (${t('size')}): ${b.y[i]}`:'')+(c?`<br>${esc(c.name)} (${t('color')}): ${c.y[i]}`:''));
+      T.push({x:d.x,y:a.y,mode:'markers+text',text:a.y,textposition:'bottom center',hovertext:hov,hoverinfo:'text',name:a.name,
+        marker:{size:sz.map(v=>v/mxs*50+10),opacity:0.75,
+          color:c?c.y.map(v=>v??0):d.x.map((_,i)=>hue(i,d.x.length)),colorscale:CS(),showscale:!!c,colorbar:{title:c?c.name:''}}});
+      layout.showlegend=false; break; }
+    case 'treemap': case 'sunburst':
+      T.push(Object.assign({type,branchvalues:'total',textinfo:'label+value+percent parent'},hier(d)));
+      layout.treemapcolorway=PAL(); layout.sunburstcolorway=PAL(); layout.showlegend=false; break;
+    case 'heatmap':
+      T.push({type:'heatmap',x:d.x,y:S.map(s=>s.name),z:S.map(s=>s.y),text:S.map(s=>s.y),texttemplate:'%{text}',colorscale:CS(),hoverongaps:false});
+      layout.yaxis={title:'',automargin:true}; layout.showlegend=false; break;
+  }
+  applyLabels(T,layout);
+  Plotly.newPlot('chartDiv',T,layout,{responsive:true,displaylogo:false});
+  analyzeData(d);
+}
+
+// ===== Data labels =====
+function refreshChart(){ if($('chartDiv')._fullLayout) createChart(); }
+function applyLabels(T,layout){
+  const on=$('showLabels').checked, lm=$('labelMode').value;
+  const txt=(x,v)=>lm==='value'?String(v):lm==='name'?String(x):`${x}: ${v}`;
+  const info={value:'value+percent',name:'label+percent',both:'label+value+percent'};
+  const hinfo={value:'value',name:'label',both:'label+value'};
+  T.forEach(tr=>{
+    const ty=tr.type||'scatter';
+    if(ty==='pie'){ tr.textinfo=on?info[lm]:'none'; tr.textposition='auto'; }
+    else if(ty==='treemap'||ty==='sunburst'){ tr.textinfo=on?hinfo[lm]:'none'; }
+    else if(ty==='heatmap'){ if(on) tr.texttemplate='%{text}'; else delete tr.texttemplate; }
+    else if(ty==='bar'||ty==='scatter'||ty==='scatterpolar'){
+      if(tr.mode==='lines') return; // regression fit line
+      const xs=ty==='scatterpolar'?tr.theta:tr.x, ys=ty==='scatterpolar'?tr.r:tr.y;
+      if(ty==='bar'){
+        if(on){ tr.text=ys.map((v,i)=>v==null?'':txt(xs[i],v)); tr.textposition='auto'; tr.cliponaxis=false; }
+        else delete tr.text;
+        tr.textfont={size:11};
+      } else {
+        tr.text=ys.map((v,i)=>v==null?'':txt(xs[i],v));
+        tr.textposition=tr.textposition||'top center';
+        tr.textfont={size:11};
+        const base=tr.mode.replace('+text','');
+        tr.mode=on?base+'+text':base;
+      }
+    }
+  });
+  layout.xaxis=Object.assign({},layout.xaxis,{automargin:true});
+  layout.yaxis=Object.assign({},layout.yaxis,{automargin:true});
+}
+
+// ===== Analysis (per variable) =====
+function analyzeData(provided){
+  const d=provided&&provided.series?provided:getData(); if(!d) return;
+  const f=(v,m=2)=>v.toLocaleString(undefined,{maximumFractionDigits:m});
+  $('statBody').innerHTML=d.series.map(s=>{
+    const v=s.y.filter(x=>x!==null), sum=v.reduce((a,b)=>a+b,0);
+    return `<tr class="border-b"><td class="p-2 text-left font-medium"><span style="color:${col(s.idx)}">●</span> ${esc(s.name)}</td>
+      <td class="p-2">${v.length}</td><td class="p-2 text-green-600 font-semibold">${f(sum)}</td>
+      <td class="p-2 text-blue-600 font-semibold">${f(sum/v.length)}</td>
+      <td class="p-2 text-purple-600">${f(Math.min(...v))}</td><td class="p-2 text-purple-600">${f(Math.max(...v))}</td></tr>`;
+  }).join('');
+}
+
+// ===== Download =====
+function downloadChart(){
+  const gd=$('chartDiv');
+  if(!gd._fullLayout){alert(t('saveFirst'));return;}
+  Plotly.relayout(gd,{paper_bgcolor:'#ffffff',plot_bgcolor:'#ffffff'})
+    .then(()=>Plotly.downloadImage(gd,{format:'png',width:1200,height:800,filename:'my_chart_visualization'}))
+    .then(()=>Plotly.relayout(gd,{paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)'}));
+}
+
+// ===== Init =====
+document.addEventListener('DOMContentLoaded',()=>{
+  initTable(5,2); resetChartArea(); applyLang();
+});
+</script>
+</body>
+</html>
